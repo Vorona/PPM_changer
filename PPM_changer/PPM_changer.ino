@@ -61,13 +61,11 @@ byte MODE = 0x00;
   pinMode(led_pin, OUTPUT);
   
   digitalWrite(led_pin, HIGH);	//turn off led
-  
+  EEPROM.get(EEP_MODE, MODE);
   if (digitalRead(button_pin) == LOW){
 	  MODE = (MODE < 3)?MODE+1:0x00;
 	  EEPROM.update(EEP_MODE, MODE);
-  } else {
-	EEPROM.get(EEP_MODE, MODE);
-	}
+  }
   if (MODE != DISABLED_MODE){
 	  ppm_out[0] = &ppm[1];
 	  ppm_out[1] = &ppm[0];

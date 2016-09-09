@@ -3,6 +3,7 @@
  You can even change these while scanning!*/
 
 #include <EEPROM.h>
+#include <SimpleTimer.h>
  
 #define PPM_Pin 3  //this must be 2 or 3
 
@@ -17,15 +18,36 @@
 #define onState 1  //set polarity of the pulses: 1 is positive, 0 is negative
 #define sigPin 10  //set PPM signal output pin on the arduino
 
-#define EEP_COPTER 0 //EEPROM address of copter flight mode switch mode
+#define EEP_MODE 0 //EEPROM address of copter flight mode switch mode
+
+#define DISABLED_MODE	0	//channel swapping disabled
+#define NORMAL_MODE		1	//swap only 1-2 channels
+#define COPTER_MODE		2	//swap 1-2 and 5-8 channels
+#define HELI_MODE		3	//heli mode
 
 int ppm[16];  //array for storing up to 16 servo signals
 
 int *ppm_out[chanel_number];
 
+byte patt = 0;
+
+SimpleTimer LedTimer;
+
+static byte LED[4][16] = {
+	{ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 },
+	{ 0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1 },
+	{ 0,0,0,1,1,0,0,0,1,1,1,1,1,1,1,1 },
+	{ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 }
+};
+
+byte pos = 0;
+
 void setup()
 {
-byte COPTER_MODE = 0x00;
+byte MODE = 0x00;
+
+	//Set config timer period to 50 ms
+	LedTimer.setInterval(50, UpdateLed);
 
   
   //initiallize default ppm values
@@ -33,27 +55,40 @@ byte COPTER_MODE = 0x00;
     ppm[i]= default_servo_value;
     ppm_out[i] = &ppm[i];
   }
-  ppm_out[0] = &ppm[1];
-  ppm_out[1] = &ppm[0];
   
-  EEPROM.get(EEP_COPTER, COPTER_MODE);
   
   pinMode(button_pin, INPUT_PULLUP);
   pinMode(led_pin, OUTPUT);
-  digitalWrite(led_pin, HIGH);
-  if (digitalRead(button_pin) == LOW){
-	  COPTER_MODE = (COPTER_MODE == 0x00)?0x01:0x00;
-	  EEPROM.update(EEP_COPTER, COPTER_MODE);
-  }
   
-  if (COPTER_MODE)
+  digitalWrite(led_pin, HIGH);	//turn off led
+  
+  if (digitalRead(button_pin) == LOW){
+	  MODE = (MODE < 3)?MODE+1:0x00;
+	  EEPROM.update(EEP_MODE, MODE);
+  } else {
+	EEPROM.get(EEP_MODE, MODE);
+	}
+  if (MODE != DISABLED_MODE){
+	  ppm_out[0] = &ppm[1];
+	  ppm_out[1] = &ppm[0];
+	}
+  
+  if (MODE == COPTER_MODE) //Copter
   {
-    digitalWrite(led_pin, LOW);
     ppm_out[4] = &ppm[7];
     ppm_out[7] = &ppm[4];
-    ppm_out[5] = &ppm[6];
-    ppm_out[6] = &ppm[5];
   }
+  
+  if (MODE == HELI_MODE) //Heli
+  {
+	ppm_out[7] = &ppm[2];
+	ppm_out[6] = &ppm[4];
+	ppm_out[5] = &ppm[6];
+	ppm_out[4] = &ppm[7];
+	ppm_out[2] = &ppm[5];
+  }
+  
+  SetPattern(MODE);
   
   pinMode(sigPin, OUTPUT);
   digitalWrite(sigPin, !onState);  //set the PPM signal pin to the default state (off)
@@ -76,12 +111,10 @@ byte COPTER_MODE = 0x00;
   TCCR3B = 0;
   TCCR3B |= (1 << CS11);  //set timer1 to increment every 0,5 us
   sei();
-//  Serial.begin(9600);
 }
 
 void loop()
 {
-//  int count;
 //  //You can delete everithing inside loop() and put your own code here
 //  int count;
 //
@@ -92,6 +125,9 @@ void loop()
 //  }
 //  Serial.println("");
 //  delay(100);  //you can even use delays!!!
+
+LedTimer.run();
+
 }
 
 
@@ -100,7 +136,6 @@ void read_ppm(){  //leave this alone
   static unsigned int pulse;
   static unsigned long counter;
   static byte channel;
-  int ppmtmp;
 
   counter = TCNT3;
   TCNT3 = 0;
@@ -112,8 +147,7 @@ void read_ppm(){  //leave this alone
     channel = 0;
   }
   else{  //servo values between 510us and 2420us will end up here
-    ppmtmp = (counter + pulse)/2;
-    ppm[channel] = (abs(ppm[channel]-ppmtmp) > 5)?ppmtmp:ppm[channel];
+    ppm[channel] = (counter + pulse)/2;
     channel++;
   }
 }
@@ -147,4 +181,13 @@ ISR(TIMER1_COMPA_vect){  //leave this alone
       cur_chan_numb++;
     }     
   }
+}
+
+void UpdateLed(){
+	digitalWrite(led_pin, LED[patt][pos]);
+	pos = (pos<15)?pos+1:0;
+}
+
+void SetPattern(byte p){
+	patt = p;
 }

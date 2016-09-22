@@ -95,19 +95,23 @@ byte MODE = 0x00;
 
   cli();
   
-  attachInterrupt(PPM_Pin - 2, read_ppm, CHANGE);  
-  
-  TCCR1A = 0; // set entire TCCR1 register to 0
-  TCCR1B = 0;
-  
-  OCR1A = 100;  // compare match register, change this
-  TCCR1B |= (1 << WGM12);  // turn on CTC mode
-  TCCR1B |= (1 << CS11);  // 8 prescaler: 0,5 microseconds at 16mhz
-  TIMSK1 |= (1 << OCIE1A); // enable timer compare interrupt
-  
-  TCCR3A = 0;  //reset timer1
-  TCCR3B = 0;
-  TCCR3B |= (1 << CS11);  //set timer1 to increment every 0,5 us
+if (MODE != DISABLED_MODE){  
+	  attachInterrupt(PPM_Pin - 2, read_ppm, CHANGE);  
+	  TCCR1A = 0; // set entire TCCR1 register to 0
+	  TCCR1B = 0;
+	  
+	  OCR1A = 100;  // compare match register, change this
+	  TCCR1B |= (1 << WGM12);  // turn on CTC mode
+	  TCCR1B |= (1 << CS11);  // 8 prescaler: 0,5 microseconds at 16mhz
+	  TIMSK1 |= (1 << OCIE1A); // enable timer compare interrupt
+	  
+	  TCCR3A = 0;  //reset timer1
+	  TCCR3B = 0;
+	  TCCR3B |= (1 << CS11);  //set timer1 to increment every 0,5 us
+	} else {
+		attachInterrupt(PPM_Pin - 2, out_high, RISING);
+		attachInterrupt(PPM_Pin - 2, out_low, FALLING);
+	}
   sei();
 }
 
@@ -128,7 +132,13 @@ LedTimer.run();
 
 }
 
+void out_high(){
+	digitalWrite(sigPin, HIGH);
+}
 
+void out_low(){
+	digitalWrite(sigPin, LOW);
+}
 
 void read_ppm(){  //leave this alone
   static unsigned int pulse;
